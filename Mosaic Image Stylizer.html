@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mosaic Image Stylizer</title>
+  <script defer src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@simonwep/pickr/dist/themes/nano.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/@simonwep/pickr@1.8.2/dist/pickr.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #161a22;
+      --text: #e8eef3;
+      --muted: #9aa5b1;
+      --accent: #4ea1ff;
+      --border: #232a36;
+      --warn: #ffb454;
+      --danger: #ff6b6b;
+      --ok: #4ade80;
+    }
+    :root[data-theme="light"] {
+      --bg: #f7f9fc;
+      --panel: #ffffff;
+      --text: #0b1220;
+      --muted: #5b6b7c;
+      --accent: #2a72ff;
+      --border: #d8e0ea;
+      --warn: #b36200;
+      --danger: #b42318;
+      --ok: #137a29;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: var(--bg); color: var(--text);
+    }
+    header {
+      padding: 14px 18px; background: linear-gradient(180deg, #111521, #0d1017);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 5;
+      display: flex; align-items: center; gap: 12px; justify-content: space-between;
+    }
+    :root[data-theme="light"] header { background: linear-gradient(180deg, #ffffff, #f1f5fb); }
+    header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+    .head-right { display: flex; align-items: center; gap: 8px; }
+    main { display: grid; grid-template-columns: 360px 1fr; gap: 16px; padding: 16px; }
+    @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; overflow: clip; }
+    .panel h2 { font-size: 14px; margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+
+    .controls { padding: 12px 14px; display: grid; gap: 10px; }
+    .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
+    label { font-size: 13px; color: var(--muted); }
+    .control { display: grid; gap: 6px; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    input[type="color"], select, button, .file {
+      background: #0e121a; border: 1px solid var(--border); color: var(--text);
+      border-radius: 10px; padding: 8px 10px; font-size: 13px;
+    }
+    :root[data-theme="light"] input[type="color"],
+    :root[data-theme="light"] select,
+    :root[data-theme="light"] button,
+    :root[data-theme="light"] .file { background: #f7f9fc; }
+    select { cursor: pointer; }
+    button { cursor: pointer; transition: transform .02s ease; }
+    button:active { transform: translateY(1px); }
+    .btn-primary { background: linear-gradient(180deg, #2a72ff, #255ee9); border: none; }
+    .btn-ghost { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
+    .btn-ghost.active { color: #cfe3ff; border-color: var(--accent); }
+
+    .u-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .drop {
+      display: grid; place-items: center; padding: 18px; text-align: center; gap: 10px;
+      border: 2px dashed #2a3547; border-radius: 14px; color: var(--muted);
+      background: #0c1017; cursor: pointer; min-height: 120px;
+    }
+    .drop.drag { border-color: var(--accent); color: var(--text); background: #0d1320; }
+    :root[data-theme="light"] .drop { background: #f2f6fb; border-color: #c9d5e3; }
+    :root[data-theme="light"] .drop.drag { background: #e9f1ff; }
+    .drop small { color: var(--muted); }
+
+    .canvas-wrap { position: relative; padding: 12px; }
+    canvas#out { width: auto; height: auto; max-width: 100%; max-height: 100%; display: block; background: transparent; border-radius: 12px; }
+    :root[data-theme="light"] canvas#out { background: transparent; }
+    .panel[aria-label="Preview"] { display: flex; flex-direction: column; }
+    .panel[aria-label="Preview"] .canvas-wrap { flex: 1 1 auto; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+
+    .crop-overlay { position: absolute; inset: 12px; border-radius: 12px; pointer-events: none; }
+    .crop-overlay .rect { position: absolute; border: 1px dashed var(--accent); background: rgba(78,161,255,.18); box-shadow: 0 0 0 9999px rgba(0,0,0,.25) inset; }
+    canvas#out.cropping { cursor: crosshair; }
+
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 14px; border-top: 1px solid var(--border); align-items: center; }
+    .grow { flex: 1 1 auto; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .kv { display: flex; align-items:center; justify-content: center; gap: 6px; font-variant-numeric: tabular-nums; }
+    .kv output { min-width: 2em; text-align: center; color: var(--text); }
+    .kv input[type="number"] { width: 5em; background: #0e121a; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 6px 6px 6px; text-align: center; }
+    :root[data-theme="light"] .kv input { background: #f2f6fb; border-color: #c9d5e3; }
+    .status { display:flex; align-items:center; gap:8px; font-size:12px; }
+    .badge { border-radius: 999px; padding:2px 8px; border:1px solid var(--border); }
+    .badge.ok { color: var(--ok); border-color: rgba(74,222,128,.35); }
+    .badge.warn { color: var(--warn); border-color: rgba(255,180,84,.35); }
+    .badge.err { color: var(--danger); border-color: rgba(255,107,107,.35); }
+    
+    details summary { cursor: pointer; }
+    .presets-row { display: flex; justify-content: space-between; align-items: center; }
+    .color-btn { width: 36px; height: 28px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Mosaic Image Stylizer</h1>
+    <div class="head-right">
+      <div class="muted">Drop an image (PNG, JPEG, GIF, or HEIC) → tweak → download • Animated GIFs supported!</div>
+      <button id="themeToggle" class="btn-ghost" title="Toggle light/dark mode" aria-pressed="false">Light mode</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel" aria-label="Controls">
+      <h2>Controls</h2>
+      <div class="controls">
+        <div class="drop" id="drop">
+          <div>
+            <div style="font-weight:600;color:#cfe3ff">Drop image here</div>
+            <small>…or click to select a file</small>
+          </div>
+          <input id="file" class="file" type="file" accept="image/*,.heic,.heif" hidden />
+        </div>
+
+        <div class="row">
+          <div class="control">
+            <label for="pixel">Mosaic Tile Size</label>
+            <input type="range" id="pixel" min="2" max="120" value="18" />
+          </div>
+          <div class="kv"><input id="num-pixel" type="number" min="2" max="120" value="18" class="[&::-webkit-inner-spin-button]:appearance-none" /> px</div>
+        </div>
+
+        <div class="row">
+          <div class="control">
+            <label for="gap">Spacing Between Tiles</label>
+            <input type="range" id="gap" min="0" max="12" value="1" />
+          </div>
+          <div class="kv"><input id="num-gap" type="number" min="0" max="12" value="1" class="[&::-webkit-inner-spin-button]:appearance-none" /> px</div>
+        </div>
+
+        <div class="row">
+          <div class="control">
+            <label for="maxdim">Max Output Dimension</label>
+            <input type="range" id="maxdim" min="256" max="4096" step="64" value="1536" />
+          </div>
+          <div class="kv"><input id="num-maxdim" type="number" min="256" max="4096" step="64" value="1536" class="[&::-webkit-inner-spin-button]:appearance-none" /> px</div>
+        </div>
+
+        <div class="row">
+          <div class="control">
+            <label for="radius">Tile Corner Radius</label>
+            <input type="range" id="radius" min="0" max="24" value="6" />
+          </div>
+          <div class="kv"><input id="num-radius" type="number" min="0" max="24" step="1" value="6" class="[&::-webkit-inner-spin-button]:appearance-none" /> px</div>
+        </div>
+
+        <div class="row">
+          <div class="control">
+            <label for="stroke">Tile Outline Width</label>
+            <input type="range" id="stroke" min="0" max="6" value="0" />
+          </div>
+          <div class="kv"><input id="num-stroke" type="number" min="0" max="6" step="1" value="0" class="[&::-webkit-inner-spin-button]:appearance-none" /> px</div>
+        </div>
+
+        <div class="row">
+          <div class="control">
+            <label for="saturation">Saturation</label>
+            <input type="range" id="saturation" min="0" max="2" step="0.01" value="1" />
+          </div>
+          <div class="kv"><input id="num-saturation" type="number" min="0" max="2" step="0.01" value="1" class="[&::-webkit-inner-spin-button]:appearance-none" /></div>
+        </div>
+
+        <div class="row">
+          <div class="control">
+            <label for="contrast">Contrast</label>
+            <input type="range" id="contrast" min="0" max="2" step="0.01" value="1" />
+          </div>
+          <div class="kv"><input id="num-contrast" type="number" min="0" max="2" step="0.01" value="1" class="[&::-webkit-inner-spin-button]:appearance-none" /></div>
+        </div>
+
+        <div class="row">
+          <div class="control">
+            <label for="brightness">Brightness</label>
+            <input type="range" id="brightness" min="0" max="2" step="0.01" value="1" />
+          </div>
+          <div class="kv"><input id="num-brightness" type="number" min="0" max="2" step="0.01" value="1" class="[&::-webkit-inner-spin-button]:appearance-none" /></div>
+        </div>
+
+        <div class="u-grid">
+          <div class="control">
+            <label for="fit">Mosaic Fit</label>
+            <select id="fit">
+              <option value="contain">Contain (no crop)</option>
+              <option value="cover" selected>Cover (crop to fill)</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="shape">Mosaic Tile Shape</label>
+            <select id="shape">
+              <option value="square" selected>Square</option>
+              <option value="rounded">Rounded</option>
+              <option value="circle">Circle</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="u-grid">
+          <div class="control">
+            <label for="bg">Background Color</label>
+            <div><button id="bgPick" class="color-btn" aria-label="Pick background color"></button></div>
+          </div>
+          <div class="control">
+            <label for="strokecolor">Tile Outline Color</label>
+            <div><button id="strokePick" class="color-btn" aria-label="Pick tile outline color"></button></div>
+          </div>
+        </div>
+
+        <div class="u-grid">
+          <button id="reset" class="btn-ghost">Reset</button>
+          <button id="download" class="btn-primary">Download PNG</button>
+          </div>
+
+        <div class="presets-row">
+          <label for="presets-row">Save Presets</label>
+          <div><button class="btn-ghost" id="saveP1" title="Save to preset 1">1</button></div>
+          <div><button class="btn-ghost" id="saveP2" title="Save to preset 2">2</button></div>
+          <div><button class="btn-ghost" id="saveP3" title="Save to preset 3">3</button></div>
+          <div><button class="btn-ghost" id="saveP4" title="Save to preset 4">4</button></div>
+          <div><button class="btn-ghost" id="saveP5" title="Save to preset 5">5</button></div>
+        </div>
+        <div class="presets-row">
+          <label for="presets-row">Load Presets</label>
+          <div><button class="btn-ghost" id="loadP1" title="Load preset 1">1</button></div>
+          <div><button class="btn-ghost" id="loadP2" title="Load preset 2">2</button></div>
+          <div><button class="btn-ghost" id="loadP3" title="Load preset 3">3</button></div>
+          <div><button class="btn-ghost" id="loadP4" title="Load preset 4">4</button></div>
+          <div><button class="btn-ghost" id="loadP5" title="Load preset 5">5</button></div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Preview">
+      <h2>Preview</h2>
+      <div class="canvas-wrap">
+        <canvas id="out" width="1280" height="720" aria-label="Stylized output"></canvas>
+        <div id="cropOverlay" class="crop-overlay" aria-hidden="true"></div>
+      </div>
+      <div class="toolbar">
+        <div class="muted">Resolution: <span id="res">–</span></div>
+        <div class="grow"></div>
+        <div class="status" id="status">
+          <span class="badge ok" id="statusBadge">Ready</span>
+          <span id="statusText" class="muted"></span>
+        </div>
+        <div class="grow"></div>
+        <div class="muted">Blocks: <span id="blocks">–</span></div>
+        <button id="resetCrop" class="btn-ghost" title="Reset crop to full image">Reset crop</button>
+        <button id="cropToggle" class="btn-ghost" aria-pressed="false" title="Toggle crop mode">Crop</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Keep a hidden <img> in DOM so animated GIFs continue advancing frames in all browsers -->
+  <img id="srcImg" alt="source" style="position:fixed; left:0; top:0; width:2px; height:2px; opacity:0; pointer-events:none;" />
+
+  <script>
+  // ---------- GIF Encoding Classes (copied from Video to GIF Converter) ----------
+  
+  function ByteArray(){
+    this._chunks = [];
+    this._buf = new Uint8Array(8192);
+    this._pos = 0;
+  }
+  ByteArray.prototype._pushBuf = function(){
+    if (this._pos > 0){ this._chunks.push(this._buf.subarray(0, this._pos)); this._buf = new Uint8Array(Math.max(8192, this._pos*2)); this._pos = 0; }
+  };
+  ByteArray.prototype.writeByte = function(b){
+    if (this._pos >= this._buf.length) this._pushBuf();
+    this._buf[this._pos++] = b & 0xFF;
+  };
+  ByteArray.prototype.writeUTFBytes = function(s){
+    for (var i=0; i<s.length; i++){
+      if (this._pos >= this._buf.length) this._pushBuf();
+      this._buf[this._pos++] = s.charCodeAt(i) & 0xFF;
+    }
+  };
+  ByteArray.prototype.writeShort = function(i){ this.writeByte(i & 0xFF); this.writeByte((i >> 8) & 0xFF); };
+  ByteArray.prototype.getBlob = function(){ this._pushBuf(); return new Blob(this._chunks, {type:'image/gif'}); };
+
+  function NeuQuant(pixels, samplefac){
+    var netsize = 256; var maxnetpos = netsize-1; var netbiasshift = 4; var ncycles = 100;
+    var intbiasshift = 16; var intbias = (1<<intbiasshift);
+    var gammashift = 10; var gamma = (1<<gammashift); var betashift = 10; var beta = (intbias>>betashift); var betagamma = (intbias << (gammashift-betashift));
+    var radiusbiasshift = 6; var radiusbias = (1<<radiusbiasshift); var initradius = (netsize>>3) * radiusbias; var radiusdec = 30;
+    var alphabiasshift = 10; var initalpha = (1<<alphabiasshift); var alphadec = 30 + ((samplefac-1)/3)|0;
+    var radbiasshift = 8; var radbias = (1<<radbiasshift); var alpharadbshift = alphabiasshift + radbiasshift; var alpharadbias = (1<<alpharadbshift);
+
+    var thepicture = pixels; var lengthcount = thepicture.length; var samplepixels = (lengthcount/3)|0; var delta = (samplepixels/ncycles)|0; var alpha = initalpha; var radius = initradius;
+
+    var net = new Array(netsize); for (var i=0; i<netsize; i++){ var v = ((i<< (netbiasshift+8))/netsize)|0; net[i] = [v,v,v,0,i]; }
+    var freq = new Int32Array(netsize); var bias = new Int32Array(netsize); for (var i=0;i<netsize;i++){ freq[i]=intbias/netsize; bias[i]=0; }
+
+    function contest(b,g,r){ var bestd = ~(1<<31); var bestbiasd = bestd; var bestpos = -1; var bestbiaspos = bestpos;
+      for (var i=0;i<netsize;i++){
+        var n = net[i]; var dist = Math.abs(n[0]-b) + Math.abs(n[1]-g) + Math.abs(n[2]-r);
+        if (dist<bestd){ bestd=dist; bestpos=i; }
+        var biasdist = dist - ((bias[i])>> (intbiasshift-netbiasshift)); if (biasdist<bestbiasd){ bestbiasd=biasdist; bestbiaspos=i; }
+        var betafreq = freq[i]>> betashift; freq[i]-=betafreq; bias[i]+= (betafreq<< (gammashift));
+      }
+      freq[bestpos] += beta; bias[bestpos] -= betagamma; return bestbiaspos;
+    }
+
+    function altersingle(alpha,i,b,g,r){ var n=net[i]; n[0]-=(alpha*(n[0]-b))>>alphabiasshift; n[1]-=(alpha*(n[1]-g))>>alphabiasshift; n[2]-=(alpha*(n[2]-r))>>alphabiasshift; }
+    function alterneigh(radius,i,b,g,r){ var lo = Math.max(i - radius, 0); var hi = Math.min(i + radius, maxnetpos);
+      var j = i+1; var k = i-1; var q = 0; while ((j<=hi) || (k>=lo)){
+        var a = (alpha * (radbias*(radius*radius - q*q) >> (8))) >> alphabiasshift;
+        if (j<=hi){ var p = net[j++]; p[0]-=(a*(p[0]-b))>>alphabiasshift; p[1]-=(a*(p[1]-g))>>alphabiasshift; p[2]-=(a*(p[2]-r))>>alphabiasshift; }
+        if (k>=lo){ var p2 = net[k--]; p2[0]-=(a*(p2[0]-b))>>alphabiasshift; p2[1]-=(a*(p2[1]-g))>>alphabiasshift; p2[2]-=(a*(p2[2]-r))>>alphabiasshift; }
+        q++;
+      }
+    }
+
+    function learn(){ var step = 0; var rad = radius >> radiusbiasshift; if (rad<=1) rad=0;
+      var pos = 0; var lim = lengthcount; var i=0;
+      while (i < lim){ var b = thepicture[pos] & 0xff; var g = thepicture[pos+1] & 0xff; var r = thepicture[pos+2] & 0xff; var j = contest(b,g,r);
+        altersingle(alpha, j, b,g,r); if (rad) alterneigh(rad, j, b,g,r);
+        pos += samplefac*3; if (pos >= lengthcount) pos -= lengthcount;
+        i += samplefac;
+        if (delta && i % delta === 0){ alpha -= alpha/alphadec; radius -= radius/radiusdec; rad = radius>>radiusbiasshift; if (rad<=1) rad=0; }
+      }
+    }
+
+    function buildColormap(){ learn(); net.sort(function(a,b){ return a[4]-b[4]; });
+      var colorTab = new Uint8Array(3*netsize); var k=0; for (var i=0;i<netsize;i++){ var n=net[i]; colorTab[k++] = n[0]; colorTab[k++] = n[1]; colorTab[k++] = n[2]; }
+      return colorTab;
+    }
+
+    this.process = function(){ return buildColormap(); };
+    this.map = function(b,g,r){ var bestd = 1<<30; var best = -1; for (var i=0;i<netsize;i++){ var n = net[i]; var d = Math.abs(n[0]-b)+Math.abs(n[1]-g)+Math.abs(n[2]-r); if (d<bestd){ bestd=d; best=i; } } return best; };
+  }
+
+  function LZWEncoder(width, height, pixels, colorDepth){
+    var imgW = width, imgH = height, pixAry = pixels, initCodeSize = Math.max(2, colorDepth|0);
+    var remaining = imgW * imgH, curPixel = 0;
+
+    var BITS = 12, HSIZE = 5003;
+    var n_bits, maxbits = BITS, maxcode, maxmaxcode = 1 << BITS;
+    var htab = new Int32Array(HSIZE), codetab = new Int32Array(HSIZE), hsize = HSIZE;
+    var free_ent = 0, clear_flg = false, g_init_bits, ClearCode, EOFCode;
+    var cur_accum = 0, cur_bits = 0, a_count = 0, accum = new Uint8Array(256);
+    var masks = [0,1,3,7,15,31,63,127,255,511,1023,2047,4095];
+
+    function MAXCODE(n){ return (1<<n)-1; }
+    function nextPixel(){ if (remaining === 0) return -1; remaining--; return pixAry[curPixel++] & 0xff; }
+    function cl_hash(n){ for (var i=0;i<n;i++) htab[i] = -1; }
+    function char_init(){ a_count = 0; }
+    function char_out(c, outs){ accum[a_count++] = c & 0xFF; if (a_count >= 254) flush_char(outs); }
+    function flush_char(outs){ if (a_count > 0){ outs.writeByte(a_count); for (var i=0;i<a_count;i++) outs.writeByte(accum[i]); a_count = 0; } }
+    function output(code, outs){
+      cur_accum &= masks[cur_bits];
+      if (cur_bits > 0) cur_accum |= (code << cur_bits); else cur_accum = code;
+      cur_bits += n_bits;
+      while (cur_bits >= 8){ char_out(cur_accum & 0xFF, outs); cur_accum >>= 8; cur_bits -= 8; }
+      if (free_ent > maxcode || clear_flg){
+        if (clear_flg){ n_bits = g_init_bits; maxcode = MAXCODE(n_bits); clear_flg = false; }
+        else { n_bits++; maxcode = (n_bits == maxbits) ? maxmaxcode : MAXCODE(n_bits); }
+      }
+      if (code == EOFCode){ while (cur_bits > 0){ char_out(cur_accum & 0xFF, outs); cur_accum >>= 8; cur_bits -= 8; } flush_char(outs); }
+    }
+    function cl_block(outs){ cl_hash(hsize); free_ent = ClearCode + 2; clear_flg = true; output(ClearCode, outs); }
+
+    function compress(init_bits, outs){
+      var fcode, c, i, ent, disp, hshift;
+      g_init_bits = init_bits; clear_flg = false; n_bits = g_init_bits; maxcode = MAXCODE(n_bits);
+      ClearCode = 1 << (init_bits - 1); EOFCode = ClearCode + 1; free_ent = ClearCode + 2;
+      char_init(); ent = nextPixel();
+      hshift = 0; for (fcode = hsize; fcode < 65536; fcode *= 2) ++hshift; hshift = 8 - hshift; disp = 1 << hshift;
+      cl_hash(hsize); output(ClearCode, outs);
+      outer: while ((c = nextPixel()) != -1){
+        fcode = (c << maxbits) + ent; i = ((c << hshift) ^ ent);
+        if (htab[i] === fcode){ ent = codetab[i]; continue; }
+        else if (htab[i] >= 0){
+          while (true){ i -= disp; if (i < 0) i += hsize; if (htab[i] === fcode){ ent = codetab[i]; continue outer; } if (htab[i] === -1) break; }
+        }
+        output(ent, outs); ent = c;
+        if (free_ent < maxmaxcode){ codetab[i] = free_ent++; htab[i] = fcode; }
+        else cl_block(outs);
+      }
+      output(ent, outs); output(EOFCode, outs);
+    }
+
+    this.encode = function(outs){ outs.writeByte(initCodeSize); compress(initCodeSize + 1, outs); };
+  }
+
+  function GIFEncoder(width, height){
+    var transparent = null; var transIndex = 0; var repeat = 0; var delay = 0; var started = false; var out = new ByteArray();
+    var image; var pixels; var indexedPixels; var colorDepth = 8; var colorTab; var palSize = 7; var sample = 10; var useGlobal = false;
+
+    this.setDelay = function(ms){ delay = Math.max(0, ms|0); };
+    this.setRepeat = function(repeatCount){ repeat = repeatCount; };
+    this.setTransparent = function(color){ transparent = color; };
+    this.setQuality = function(q){ sample = Math.max(1, q|0); };
+    this.setGlobalPalette = function(tab){ colorTab = tab; colorDepth = 8; palSize = 7; useGlobal = true; };
+
+    // For local-palette mode: set per-frame palette before addIndexedFrame
+    this.setFramePalette = function(tab){ colorTab = tab; /* keep useGlobal=false so palette is written per frame */ };
+
+    this.start = function(){ out = new ByteArray(); writeHeader(); writeLSD(width, height); if (repeat >= 0) writeNetscapeExt(repeat); started = true; };
+    this.finish = function(){ writeTrailer(); started = false; };
+    this.stream = function(){ return out; };
+
+    this.addFrame = function(im){ // per-frame quantization (fallback)
+      if (!started) throw new Error('Call start() before addFrame().');
+      var w = width, h = height;
+      image = im.getImageData(0,0,w,h);
+      pixels = image.data; // RGBA
+      // Train NeuQuant with B,G,R order (expected by implementation)
+      var train = new Uint8Array(w*h*3);
+      for (var i=0, j=0; i<pixels.length; i+=4){ train[j++] = pixels[i+2]; train[j++] = pixels[i+1]; train[j++] = pixels[i]; }
+      var nq = new NeuQuant(train, sample);
+      colorTab = nq.process();
+      indexedPixels = new Uint8Array(w*h);
+      var k=0; for (var y=0;y<h;y++){
+        for (var x=0;x<w;x++){
+          var off = (k<<2);
+          var r = pixels[off], g = pixels[off+1], b = pixels[off+2];
+          indexedPixels[k++] = nq.map(b,g,r); // pass B,G,R to mapper
+        }
+      }
+      writeGraphicCtrlExt();
+      writeImageDesc(w,h);
+      if (!useGlobal) writePalette();
+      writePixels(indexedPixels);
+    };
+
+    this.addIndexedFrame = function(indexed){
+      if (!started) throw new Error('Call start() before addIndexedFrame().');
+      writeGraphicCtrlExt();
+      writeImageDesc(width,height);
+      if (!useGlobal) writePalette();
+      writePixels(indexed);
+    };
+
+    function writeHeader(){ out.writeUTFBytes('GIF89a'); }
+    function writeLSD(w,h){ out.writeShort(w); out.writeShort(h); out.writeByte(useGlobal ? 0xF7 : 0x70); out.writeByte(0); out.writeByte(0); if (useGlobal) writePalette(); }
+    function writePalette(){
+      // Convert NeuQuant BGR → GIF RGB
+      for (var i=0; i<colorTab.length; i+=3){ out.writeByte(colorTab[i+2]); out.writeByte(colorTab[i+1]); out.writeByte(colorTab[i]); }
+      var n = (3 * 256) - colorTab.length; for (var j=0;j<n;j++) out.writeByte(0);
+    }
+    function writeGraphicCtrlExt(){ out.writeByte(0x21); out.writeByte(0xf9); out.writeByte(4); var transp = transparent !== null ? 1 : 0; var disp = transp ? 2 : 0; out.writeByte((disp<<2) | 0 | 0 | transp); out.writeShort(Math.max(1, Math.round(delay/10))); out.writeByte(transIndex); out.writeByte(0); }
+    function writeImageDesc(w,h){ out.writeByte(0x2c); out.writeShort(0); out.writeShort(0); out.writeShort(w); out.writeShort(h); out.writeByte(useGlobal ? 0x00 : (0x80 | palSize)); }
+    function writePixels(indexed){ var lzw = new LZWEncoder(width, height, indexed, colorDepth); lzw.encode(out); out.writeByte(0x00); }
+    function writeTrailer(){ out.writeByte(0x3b); }
+
+    function writeNetscapeExt(loopCount){ out.writeByte(0x21); out.writeByte(0xff); out.writeByte(11); out.writeUTFBytes('NETSCAPE2.0'); out.writeByte(3); out.writeByte(1); out.writeShort(loopCount); out.writeByte(0); }
+  }
+
+  function clamp8(v){ v = Math.round(v); return v<0?0:(v>255?255:v); }
+  const bayer4 = [0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+
+  function mapImageToIndexed(img, w,h, nq, colorTab, ditherMode, strength){
+    const data = img.data; const out = new Uint8Array(w*h);
+    const mode = ditherMode || 'none';
+    if (mode === 'floyd'){
+      // Build RGB palette (convert from NeuQuant BGR)
+      const pal = new Float32Array(256*3);
+      for (let i=0, j=0; i<colorTab.length && j<pal.length; i+=3, j+=3){
+        pal[j] = colorTab[i+2]; pal[j+1] = colorTab[i+1]; pal[j+2] = colorTab[i];
+      }
+      const work = new Float32Array(w*h*3);
+      for (let p=0, q=0; p<data.length && q<work.length; p+=4, q+=3){
+        work[q] = data[p]; work[q+1] = data[p+1]; work[q+2] = data[p+2];
+      }
+      const s = Math.max(0, Math.min(1, (Number(strength)||0) / 48));
+      for (let y=0; y<h; y++){
+        for (let x=0; x<w; x++){
+          const idx = y*w + x; const off = idx*3;
+          let r = work[off], g = work[off+1], b = work[off+2];
+          const pi = nq.map(b,g,r);
+          out[idx] = pi;
+          const pr = pal[pi*3], pg = pal[pi*3+1], pb = pal[pi*3+2];
+          const er = (r - pr) * s, eg = (g - pg) * s, eb = (b - pb) * s;
+          // Distribute error (Floyd–Steinberg)
+          const add = (xx,yy,wf)=>{
+            if (xx<0||xx>=w||yy<0||yy>=h) return;
+            const ii = (yy*w + xx)*3; work[ii] += er*wf; work[ii+1] += eg*wf; work[ii+2] += eb*wf;
+          };
+          add(x+1, y  , 7/16);
+          add(x-1, y+1, 3/16);
+          add(x  , y+1, 5/16);
+          add(x+1, y+1, 1/16);
+        }
+      }
+      return out;
+    } else {
+      let k=0;
+      for (let y=0;y<h;y++){
+        for (let x=0;x<w;x++,k++){
+          let i = (k<<2);
+          let r = data[i], g = data[i+1], b = data[i+2];
+          if (mode === 'ordered'){
+            const t = bayer4[((y&3)<<2) | (x&3)]/16 - 0.5; const off = t * 2 * (Number(strength)||0); r = clamp8(r+off); g = clamp8(g+off); b = clamp8(b+off);
+          }
+          out[k] = nq.map(b,g,r); // NeuQuant expects B,G,R
+        }
+      }
+      return out;
+    }
+  }
+
+  // ---------- End GIF Encoding Classes ----------
+
+  (() => {
+    const $ = (id) => document.getElementById(id);
+
+    const els = {
+      drop: $('drop'), file: $('file'), canvas: $('out'),
+      pixel: $('pixel'), gap: $('gap'), fit: $('fit'),
+      shape: $('shape'), radius: $('radius'), stroke: $('stroke'),
+      bgPickBtn: document.getElementById('bgPick'), strokePickBtn: document.getElementById('strokePick'),
+      maxdim: $('maxdim'),
+      numPixel: $('num-pixel'), numGap: $('num-gap'), numMax: $('num-maxdim'),
+      res: $('res'), blocks: $('blocks'),
+      download: $('download'), reset: $('reset'), srcImg: $('srcImg'),
+      status: $('status'), statusBadge: $('statusBadge'), statusText: $('statusText'),
+      // Preset buttons
+      saveP1: document.getElementById('saveP1'), loadP1: document.getElementById('loadP1'),
+      saveP2: document.getElementById('saveP2'), loadP2: document.getElementById('loadP2'),
+      saveP3: document.getElementById('saveP3'), loadP3: document.getElementById('loadP3'),
+      saveP4: document.getElementById('saveP4'), loadP4: document.getElementById('loadP4'),
+      saveP5: document.getElementById('saveP5'), loadP5: document.getElementById('loadP5')
+    };
+
+    const state = {
+      img: null, url: null,
+      pixelSize: +els.pixel.value,
+      gap: +els.gap.value,
+      bg: '#101318FF',
+      fit: els.fit.value, // 'contain' or 'cover'
+      shape: els.shape.value, // 'square' | 'rounded' | 'circle'
+      radius: +els.radius.value,
+      stroke: +els.stroke.value,
+      strokeColor: '#000000FF',
+      saturation: +(document.getElementById('saturation')?.value || 1),
+      contrast: +(document.getElementById('contrast')?.value || 1),
+      brightness: +(document.getElementById('brightness')?.value || 1),
+      
+      animatePref: 'off',
+      maxDim: +els.maxdim.value,
+      running: false, rafId: 0,
+      // cache to reduce allocations:
+      small: document.createElement('canvas'),
+      // diagnostics
+      lastError: null,
+      loadId: 0,
+      // crop state
+      cropping: false,
+      cropRect: null, // { sx, sy, sw, sh } in natural image coords
+      map: null, // last render mapping for output<->source conversion
+      // animated GIF support
+      isAnimatedGif: false,
+      gifFrameRate: 10, // default fallback rate
+      gifFrameCount: 1,
+      sourceBlob: null, // keep reference to original file for GIF processing
+    };
+
+    // ——————— Helpers ———————
+    function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+    function isRenderable(img) {
+      try { return !!(img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0 && !img.dataset.broken); }
+      catch { return false; }
+    }
+    function setStatus(kind, msg="", progress) {
+      const badge = els.statusBadge; const text = els.statusText;
+      badge.classList.remove('ok','warn','err');
+      if (kind === 'ok') badge.classList.add('ok');
+      else if (kind === 'warn') badge.classList.add('warn');
+      else badge.classList.add('err');
+      badge.textContent = kind === 'ok' ? 'Ready' : kind === 'warn' ? 'Warning' : 'Error';
+      text.textContent = msg || '';
+      
+      // Update progress bar if progress is provided
+      if (typeof progress === 'number') {
+        updateProgressBar(progress);
+      } else {
+        updateProgressBar(0);
+      }
+    }
+
+    function updateProgressBar(progress) {
+      // Create progress bar if it doesn't exist
+      let progressBar = document.getElementById('progress-bar');
+      if (!progressBar) {
+        const statusEl = document.getElementById('status');
+        if (statusEl) {
+          progressBar = document.createElement('div');
+          progressBar.id = 'progress-bar';
+          progressBar.style.cssText = `
+            width: 100px; height: 4px; background: var(--border); border-radius: 2px; 
+            overflow: hidden; margin-left: 8px; position: relative; display: none;
+          `;
+          
+          const progressFill = document.createElement('div');
+          progressFill.id = 'progress-fill';
+          progressFill.style.cssText = `
+            height: 100%; background: linear-gradient(90deg, var(--accent), #2a72ff); 
+            transition: width 0.3s ease; width: 0%;
+          `;
+          
+          progressBar.appendChild(progressFill);
+          statusEl.appendChild(progressBar);
+        }
+      }
+      
+      if (progressBar) {
+        const progressFill = document.getElementById('progress-fill');
+        if (progress > 0 && progress < 1) {
+          progressBar.style.display = 'block';
+          if (progressFill) {
+            progressFill.style.width = Math.max(0, Math.min(100, progress * 100)) + '%';
+          }
+        } else {
+          progressBar.style.display = 'none';
+        }
+      }
+    }
+    function scheduleRender() {
+      // ensure we render in a clean frame after load/decoding
+      if (state.rafId) cancelAnimationFrame(state.rafId);
+      state.rafId = requestAnimationFrame(() => { render(); state.rafId = 0; });
+    }
+
+    function sizePreviewPanel() {
+      const panel = document.querySelector('section[aria-label="Preview"]');
+      const header = document.querySelector('header');
+      const main = document.querySelector('main');
+      if (!panel || !main) return;
+      const headerH = header ? header.getBoundingClientRect().height : 0;
+      const cs = window.getComputedStyle(main);
+      const padTop = parseFloat(cs.paddingTop) || 0;
+      const padBottom = parseFloat(cs.paddingBottom) || 0;
+      const available = Math.max(320, (window.innerHeight || document.documentElement.clientHeight) - headerH - padTop - padBottom);
+      panel.style.height = available + 'px';
+    }
+
+    function bindRange(range, num, key, step=1) {
+      const syncFromRange = () => {
+        let v = +range.value;
+        if (step) v = Math.round(v/step)*step;
+        state[key] = v; if (num) num.value = String(v);
+        render();
+      };
+      const syncFromNumber = () => {
+        let v = +num.value;
+        const min = +(range.min||''); const max = +(range.max||'');
+        if (!Number.isFinite(v)) v = state[key];
+        if (Number.isFinite(min)) v = Math.max(min, v);
+        if (Number.isFinite(max)) v = Math.min(max, v);
+        if (step) v = Math.round(v/step)*step;
+        range.value = String(v); state[key] = v; render();
+      };
+      range.addEventListener('input', syncFromRange);
+      range.addEventListener('change', syncFromRange);
+      if (num) { num.addEventListener('input', syncFromNumber); num.addEventListener('change', syncFromNumber); num.value = String(range.value); }
+    }
+
+    function serializeSettings(){
+      return {
+        pixelSize: state.pixelSize,
+        gap: state.gap,
+        maxDim: state.maxDim,
+        bg: state.bg,
+        fit: state.fit,
+        shape: state.shape,
+        radius: state.radius,
+        stroke: state.stroke,
+        strokeColor: state.strokeColor,
+        saturation: state.saturation ?? 1,
+        contrast: state.contrast ?? 1,
+        brightness: state.brightness ?? 1,
+      };
+    }
+
+    function applySettings(s){
+      if (!s) return;
+      if (typeof s.pixelSize === 'number') { els.pixel.value = String(s.pixelSize); if (els.numPixel) els.numPixel.value = String(s.pixelSize); state.pixelSize = s.pixelSize; }
+      if (typeof s.gap === 'number') { els.gap.value = String(s.gap); if (els.numGap) els.numGap.value = String(s.gap); state.gap = s.gap; }
+      if (typeof s.maxDim === 'number') { els.maxdim.value = String(s.maxDim); if (els.numMax) els.numMax.value = String(s.maxDim); state.maxDim = s.maxDim; }
+      if (typeof s.bg === 'string') { state.bg = s.bg; if (typeof bgPickr !== 'undefined' && bgPickr) bgPickr.setColor(hexToRgba(state.bg)); }
+      if (typeof s.fit === 'string') { els.fit.value = s.fit; state.fit = s.fit; }
+      if (typeof s.shape === 'string') { els.shape.value = s.shape; state.shape = s.shape; }
+      if (typeof s.radius === 'number') { els.radius.value = String(s.radius); state.radius = s.radius; }
+      if (typeof s.stroke === 'number') { els.stroke.value = String(s.stroke); state.stroke = s.stroke; }
+      if (typeof s.strokeColor === 'string') { state.strokeColor = s.strokeColor; if (typeof strokePickr !== 'undefined' && strokePickr) strokePickr.setColor(hexToRgba(state.strokeColor)); }
+      if (typeof s.saturation === 'number') { const el=document.getElementById('saturation'); const num=document.getElementById('num-saturation'); if(el){ el.value=String(s.saturation); } if(num){ num.value=String(s.saturation);} state.saturation=s.saturation; }
+      if (typeof s.contrast === 'number') { const el=document.getElementById('contrast'); const num=document.getElementById('num-contrast'); if(el){ el.value=String(s.contrast); } if(num){ num.value=String(s.contrast);} state.contrast=s.contrast; }
+      if (typeof s.brightness === 'number') { const el=document.getElementById('brightness'); const num=document.getElementById('num-brightness'); if(el){ el.value=String(s.brightness); } if(num){ num.value=String(s.brightness);} state.brightness=s.brightness; }
+      render();
+    }
+
+    // Highlight the active loaded preset button
+    function setActivePreset(n){
+      [1,2,3,4,5].forEach(i => {
+        const btn = els[`loadP${i}`];
+        if (!btn) return;
+        const isActive = i === n;
+        if (isActive) { btn.classList.add('active'); btn.setAttribute('aria-pressed','true'); }
+        else { btn.classList.remove('active'); btn.setAttribute('aria-pressed','false'); }
+      });
+    }
+
+    function stopAnim() { if (state.rafId) cancelAnimationFrame(state.rafId); state.rafId = 0; state.running = false; }
+
+    function maybeStartAnim() { /* animated GIF features removed */ }
+
+    function tick() { sizePreviewPanel(); render(); state.rafId = requestAnimationFrame(tick); }
+
+    function naturalFit(nw, nh, maxDim) {
+      const scale = Math.min(1, maxDim / Math.max(nw, nh));
+      return { w: Math.round(nw * scale), h: Math.round(nh * scale) };
+    }
+
+    function computeDrawRect(imgW, imgH, outW, outH, mode) {
+      // returns { sx, sy, sw, sh, dx, dy, dw, dh } to drawImage with cover/contain
+      const ir = imgW / imgH; const or = outW / outH;
+      let dw, dh, dx, dy, sw, sh, sx, sy;
+      if (mode === 'cover') {
+        if (ir > or) { // image wider
+          sh = imgH; sw = Math.round(sh * or); sy = 0; sx = Math.round((imgW - sw) / 2);
+          dw = outW; dh = outH; dx = 0; dy = 0;
+        } else {
+          sw = imgW; sh = Math.round(sw / or); sx = 0; sy = Math.round((imgH - sh) / 2);
+          dw = outW; dh = outH; dx = 0; dy = 0;
+        }
+      } else { // contain
+        if (ir > or) { dw = outW; dh = Math.round(outW / ir); dx = 0; dy = Math.round((outH - dh) / 2); }
+        else { dh = outH; dw = Math.round(outH * ir); dx = Math.round((outW - dw) / 2); dy = 0; }
+        sx = 0; sy = 0; sw = imgW; sh = imgH;
+      }
+      return { sx, sy, sw, sh, dx, dy, dw, dh };
+    }
+
+    function roundedRect(ctx, x, y, w, h, r) {
+      const rr = Math.min(r, Math.min(w, h) / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+    }
+
+    // ——————— Core render ———————
+    function render() {
+      const { img } = state; const ctx = els.canvas.getContext('2d');
+
+      if (!isRenderable(img)) {
+        // Blank/placeholder canvas; avoids drawImage on broken/zero-size images
+        ctx.save();
+        ctx.fillStyle = state.bg; ctx.fillRect(0,0,els.canvas.width,els.canvas.height);
+        ctx.restore();
+        els.res.textContent = '–'; els.blocks.textContent = '–';
+        return;
+      }
+
+      // Fit natural size within maxDim (consider crop if set)
+      const srcBaseX = state.cropRect ? Math.max(0, Math.floor(state.cropRect.sx)) : 0;
+      const srcBaseY = state.cropRect ? Math.max(0, Math.floor(state.cropRect.sy)) : 0;
+      const srcW = state.cropRect ? Math.max(1, Math.floor(state.cropRect.sw)) : img.naturalWidth;
+      const srcH = state.cropRect ? Math.max(1, Math.floor(state.cropRect.sh)) : img.naturalHeight;
+
+      const fitNat = naturalFit(srcW, srcH, state.maxDim);
+      const drawW = Math.max(1, fitNat.w); const drawH = Math.max(1, fitNat.h);
+
+      // Compute block grid from pixelSize
+      const p = Math.max(2, state.pixelSize|0);
+      const bx = Math.max(1, Math.floor(drawW / p));
+      const by = Math.max(1, Math.floor(drawH / p));
+
+      // Compute output canvas size factoring gaps
+      const g = Math.max(0, state.gap);
+      const cell = p + g; // cell advance
+      const outW = Math.max(1, bx * cell - g); // no trailing gap
+      const outH = Math.max(1, by * cell - g);
+
+      if (els.canvas.width !== outW || els.canvas.height !== outH) {
+        els.canvas.width = outW; els.canvas.height = outH;
+      }
+
+      els.res.textContent = outW + '×' + outH;
+      els.blocks.textContent = bx + '×' + by + ' (' + (bx*by) + ')';
+
+      // Prepare small sampling canvas
+      const sctx = state.small.getContext('2d', { willReadFrequently: true });
+      state.small.width = bx; state.small.height = by;
+      // fill with bg (respect alpha) in case of contain letterboxing sampling
+      try { sctx.clearRect(0,0,bx,by); sctx.fillStyle = hexToRgba(state.bg); } catch(_){ sctx.fillStyle = 'rgba(0,0,0,0)'; }
+      sctx.fillRect(0,0,bx,by);
+      sctx.imageSmoothingEnabled = true; // average colors on downscale
+
+      // Draw image into small canvas using cover/contain mapping
+      const r = computeDrawRect(srcW, srcH, bx, by, state.fit);
+      // As a last guard, skip if any source dimensions are invalid
+      if (r.sw > 0 && r.sh > 0 && r.dw > 0 && r.dh > 0) {
+        try {
+          sctx.drawImage(img, srcBaseX + r.sx, srcBaseY + r.sy, r.sw, r.sh, r.dx, r.dy, r.dw, r.dh);
+        } catch (e) {
+          // In case the image became broken mid‑frame (rare on animated sources)
+          state.lastError = e; setStatus('warn', 'Skipping a frame due to image readiness.');
+          return; // bail this frame but keep animation running
+        }
+      }
+
+      let data;
+      try {
+        data = sctx.getImageData(0,0,bx,by).data;
+      } catch (e) {
+        state.lastError = e; setStatus('err', 'Could not sample image data.');
+        return;
+      }
+
+      // Save last mapping for crop calculations
+      state.map = { bx, by, cell, outW, outH, r, srcBaseX, srcBaseY };
+
+      // Paint output
+      const ctx2 = ctx; ctx2.save();
+      // Ensure no residual pixels remain when using semi-transparent backgrounds
+      ctx2.clearRect(0,0,outW,outH);
+      // parse bg as hex with optional alpha
+      (function(){
+        const hex = state.bg.replace('#','');
+        const hasA = hex.length === 8;
+        const r = parseInt(hex.substring(0,2),16);
+        const g = parseInt(hex.substring(2,4),16);
+        const b = parseInt(hex.substring(4,6),16);
+        const a = hasA ? parseInt(hex.substring(6,8),16)/255 : 1;
+        ctx2.fillStyle = `rgba(${r},${g},${b},${a})`;
+        ctx2.fillRect(0,0,outW,outH);
+      })();
+      // Precompute adjustment factors (allow zero values)
+      const sat = Math.max(0, (state.saturation ?? 1));
+      const con = Math.max(0, (state.contrast ?? 1));
+      const bri = Math.max(0, (state.brightness ?? 1));
+      const jitter = 0;
+      const drawShape = state.shape;
+      const radius = state.radius;
+      const strokeW = state.stroke;
+      const strokeColor = state.strokeColor;
+
+      // Pre-configure stroke (supports hex with alpha)
+      if (strokeW > 0) {
+        ctx2.lineWidth = strokeW;
+        const hex = (strokeColor || '#000000FF').replace('#','');
+        const hasA = hex.length === 8;
+        const r = parseInt(hex.substring(0,2),16);
+        const g = parseInt(hex.substring(2,4),16);
+        const b = parseInt(hex.substring(4,6),16);
+        const a = hasA ? parseInt(hex.substring(6,8),16)/255 : 1;
+        ctx2.strokeStyle = `rgba(${r},${g},${b},${a})`;
+      }
+
+      for (let y = 0; y < by; y++) {
+        for (let x = 0; x < bx; x++) {
+          const i = (y * bx + x) * 4;
+          let cr = data[i], cg = data[i+1], cb = data[i+2]; const ca = data[i+3] / 255;
+          // Apply contrast → saturation → brightness (so zero values behave intuitively)
+          cr = (cr - 128) * con + 128; cg = (cg - 128) * con + 128; cb = (cb - 128) * con + 128;
+          const gray = 0.299*cr + 0.587*cg + 0.114*cb;
+          cr = gray + (cr - gray) * sat; cg = gray + (cg - gray) * sat; cb = gray + (cb - gray) * sat;
+          cr = cr * bri; cg = cg * bri; cb = cb * bri;
+          cr = Math.max(0, Math.min(255, cr)); cg = Math.max(0, Math.min(255, cg)); cb = Math.max(0, Math.min(255, cb));
+          const ox = x * cell;
+          const oy = y * cell;
+          const w = p, h = p;
+
+          // jitter removed
+          const jx = 0;
+          const jy = 0;
+          const px = clamp(ox + jx, ox, ox + cell - w);
+          const py = clamp(oy + jy, oy, oy + cell - h);
+
+          ctx2.globalAlpha = ca; // respect source alpha
+          ctx2.fillStyle = `rgb(${cr},${cg},${cb})`;
+
+          if (drawShape === 'square') {
+            ctx2.fillRect(px, py, w, h);
+            if (strokeW > 0) { ctx2.strokeRect(px + strokeW/2, py + strokeW/2, w - strokeW, h - strokeW); }
+          } else if (drawShape === 'rounded') {
+            roundedRect(ctx2, px, py, w, h, radius);
+            ctx2.fill(); if (strokeW > 0) ctx2.stroke();
+          } else { // circle
+            const cx = px + w/2, cy = py + h/2; const rad = Math.min(w,h)/2;
+            ctx2.beginPath(); ctx2.arc(cx, cy, rad, 0, Math.PI*2); ctx2.closePath();
+            ctx2.fill(); if (strokeW > 0) ctx2.stroke();
+          }
+        }
+      }
+
+      ctx2.restore();
+      // clear status if previously errored
+      if (state.lastError) { state.lastError = null; setStatus('ok', ''); }
+    }
+
+    // ——————— Crop helpers ———————
+    function mapOutputToSource(x, y) {
+      const m = state.map; if (!m || !isRenderable(state.img)) return null;
+      // Normalize output coords to [0..1]
+      const nx = m.outW > 0 ? (x / m.outW) : 0;
+      const ny = m.outH > 0 ? (y / m.outH) : 0;
+      // Letterbox offsets and sizes in normalized small-canvas units
+      const bw = Math.max(1, m.bx), bh = Math.max(1, m.by);
+      const offX = (m.r.dx || 0) / bw;
+      const offY = (m.r.dy || 0) / bh;
+      const sizeX = Math.max(1e-6, (m.r.dw || bw) / bw);
+      const sizeY = Math.max(1e-6, (m.r.dh || bh) / bh);
+      // Fraction within drawn region
+      let fx = (nx - offX) / sizeX;
+      let fy = (ny - offY) / sizeY;
+      fx = Math.max(0, Math.min(1, fx));
+      fy = Math.max(0, Math.min(1, fy));
+      const sx = m.srcBaseX + m.r.sx + fx * (m.r.sw);
+      const sy = m.srcBaseY + m.r.sy + fy * (m.r.sh);
+      return { sx, sy };
+    }
+
+    function beginCropSelection() {
+      if (!els.cropOverlay) return;
+      els.canvas.classList.add('cropping');
+      els.cropToggle && els.cropToggle.classList.add('active');
+    }
+
+    function endCropSelection() {
+      els.canvas.classList.remove('cropping');
+      els.cropToggle && els.cropToggle.classList.remove('active');
+      if (els.cropOverlay) els.cropOverlay.innerHTML = '';
+    }
+
+    function updateOverlayRect(x0, y0, x1, y1) {
+      if (!els.cropOverlay) return;
+      let rectEl = els.cropOverlay.firstElementChild;
+      if (!rectEl) { rectEl = document.createElement('div'); rectEl.className = 'rect'; els.cropOverlay.appendChild(rectEl); }
+      const r = els.canvas.getBoundingClientRect();
+      const scaleX = els.canvas.width / r.width;
+      const scaleY = els.canvas.height / r.height;
+      // convert canvas px to overlay px
+      const ox0 = Math.min(x0, x1) / scaleX;
+      const oy0 = Math.min(y0, y1) / scaleY;
+      const ow = Math.abs(x1 - x0) / scaleX;
+      const oh = Math.abs(y1 - y0) / scaleY;
+      rectEl.style.left = ox0 + 'px';
+      rectEl.style.top = oy0 + 'px';
+      rectEl.style.width = ow + 'px';
+      rectEl.style.height = oh + 'px';
+    }
+
+    // ——————— GIF Detection ———————
+    function isGifBlob(blob) {
+      return blob && (blob.type === 'image/gif' || (blob.name && blob.name.toLowerCase().endsWith('.gif')));
+    }
+
+    async function detectAnimatedGif(blob) {
+      if (!isGifBlob(blob)) return { isAnimated: false, frameRate: 10, frameCount: 1 };
+      
+      try {
+        // Read the blob as array buffer to analyze GIF structure
+        const buffer = await blob.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        
+        // Check GIF signature
+        if (bytes.length < 6) return { isAnimated: false, frameRate: 10, frameCount: 1 };
+        const signature = String.fromCharCode(...bytes.slice(0, 6));
+        if (signature !== 'GIF87a' && signature !== 'GIF89a') return { isAnimated: false, frameRate: 10, frameCount: 1 };
+        
+        // Look for multiple image descriptors or graphic control extensions
+        let frameCount = 0;
+        let totalDelay = 0;
+        let pos = 13; // Skip header and logical screen descriptor
+        
+        // Skip global color table if present
+        const globalColorTableFlag = bytes[10] & 0x80;
+        if (globalColorTableFlag) {
+          const globalColorTableSize = 2 << (bytes[10] & 0x07);
+          pos += globalColorTableSize * 3;
+        }
+        
+        while (pos < bytes.length - 1) {
+          if (bytes[pos] === 0x21) { // Extension
+            if (bytes[pos + 1] === 0xF9) { // Graphic Control Extension
+              const delay = bytes[pos + 4] | (bytes[pos + 5] << 8);
+              totalDelay += delay;
+              pos += 8; // Skip graphic control extension
+            } else if (bytes[pos + 1] === 0xFF) { // Application Extension
+              pos += 2;
+              const blockSize = bytes[pos++];
+              pos += blockSize; // Skip block data
+              // Skip sub-blocks
+              while (pos < bytes.length && bytes[pos] !== 0) {
+                pos += bytes[pos] + 1;
+              }
+              pos++; // Skip terminator
+            } else {
+              // Skip other extensions
+              pos += 2;
+              while (pos < bytes.length && bytes[pos] !== 0) {
+                pos += bytes[pos] + 1;
+              }
+              pos++; // Skip terminator
+            }
+          } else if (bytes[pos] === 0x2C) { // Image Descriptor
+            frameCount++;
+            pos += 10; // Skip image descriptor header
+            
+            // Skip local color table if present
+            const localColorTableFlag = bytes[pos - 1] & 0x80;
+            if (localColorTableFlag) {
+              const localColorTableSize = 2 << (bytes[pos - 1] & 0x07);
+              pos += localColorTableSize * 3;
+            }
+            
+            // Skip image data
+            pos++; // Skip LZW minimum code size
+            while (pos < bytes.length && bytes[pos] !== 0) {
+              pos += bytes[pos] + 1;
+            }
+            pos++; // Skip terminator
+          } else if (bytes[pos] === 0x3B) { // Trailer
+            break;
+          } else {
+            pos++;
+          }
+        }
+        
+        const isAnimated = frameCount > 1;
+        const frameRate = isAnimated && totalDelay > 0 ? Math.round((frameCount * 100) / totalDelay) : 10;
+        
+        return {
+          isAnimated,
+          frameRate: Math.max(1, Math.min(60, frameRate)), // Clamp between 1-60 fps
+          frameCount: Math.max(1, frameCount)
+        };
+      } catch (error) {
+        console.warn('Error detecting animated GIF:', error);
+        return { isAnimated: false, frameRate: 10, frameCount: 1 };
+      }
+    }
+
+    // ——————— GIF Frame Extraction ———————
+    
+    // Simple frame extraction method (fallback)
+    async function extractGifFramesSimple(blob) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const frames = [];
+        
+        img.onload = function() {
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          
+          // For simple extraction, just capture the first frame multiple times
+          // This isn't ideal but serves as a fallback
+          const captureCurrentFrame = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            return {
+              imageData: frameData,
+              width: canvas.width,
+              height: canvas.height,
+              index: frames.length
+            };
+          };
+          
+          // Try to capture at least one frame
+          const frame = captureCurrentFrame();
+          frames.push(frame);
+          
+          // If it's supposed to be animated, try to capture a few more frames with delays
+          if (state.gifFrameCount > 1) {
+            let captured = 1;
+            const maxCaptures = Math.min(state.gifFrameCount, 10); // Limit for fallback
+            
+            const captureNext = () => {
+              if (captured < maxCaptures) {
+                setTimeout(() => {
+                  frames.push(captureCurrentFrame());
+                  captured++;
+                  setStatus('ok', `Simple extraction: ${captured}/${maxCaptures} frames`, 0.05 + (captured / maxCaptures) * 0.05);
+                  if (captured < maxCaptures) {
+                    captureNext();
+                  } else {
+                    URL.revokeObjectURL(img.src);
+                    resolve(frames);
+                  }
+                }, 200); // 200ms delay between captures
+              }
+            };
+            
+            captureNext();
+          } else {
+            URL.revokeObjectURL(img.src);
+            resolve(frames);
+          }
+        };
+        
+        img.onerror = function() {
+          URL.revokeObjectURL(img.src);
+          reject(new Error('Failed to load GIF for simple frame extraction'));
+        };
+        
+        img.src = URL.createObjectURL(blob);
+        
+        // Timeout for simple method
+        setTimeout(() => {
+          if (frames.length === 0) {
+            reject(new Error('Simple frame extraction timeout'));
+          } else {
+            resolve(frames);
+          }
+        }, 5000);
+      });
+    }
+    
+    async function extractGifFrames(blob, frameCount, frameRate) {
+      return new Promise((resolve, reject) => {
+        const frames = [];
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Create an img element for frame extraction
+        const img = new Image();
+        let capturedFrames = 0;
+        const frameInterval = 1000 / frameRate; // milliseconds per frame
+        
+        img.onload = function() {
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          
+          const captureFrame = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            frames.push({
+              imageData: frameData,
+              width: canvas.width,
+              height: canvas.height
+            });
+            
+            capturedFrames++;
+            if (capturedFrames >= frameCount) {
+              URL.revokeObjectURL(img.src);
+              resolve(frames);
+            } else {
+              // Wait for next frame based on frame rate
+              setTimeout(captureFrame, frameInterval);
+            }
+          };
+          
+          // Start capturing frames after a short delay to let the GIF start animating
+          setTimeout(captureFrame, 100);
+        };
+        
+        img.onerror = function() {
+          URL.revokeObjectURL(img.src);
+          reject(new Error('Failed to load GIF for frame extraction'));
+        };
+        
+        img.src = URL.createObjectURL(blob);
+      });
+    }
+
+    // Alternative frame extraction method using canvas timing
+    async function extractGifFramesAdvanced(blob, frameCount, frameRate) {
+      return new Promise((resolve, reject) => {
+        const frames = [];
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Create multiple image elements to try to capture different phases
+        const images = [];
+        const frameDelay = Math.max(100, 1000 / frameRate); // ms per frame, minimum 100ms
+        let completedImages = 0;
+        let extractedFrames = 0;
+        
+        const updateExtractionProgress = () => {
+          const progress = 0.05 + (extractedFrames / frameCount) * 0.05; // 5% to 10% of total progress
+          setStatus('ok', `Extracting frames... ${extractedFrames}/${frameCount}`, progress);
+        };
+        
+        const processImage = (img, index) => {
+          img.onload = function() {
+            if (frames.length === 0) {
+              // Set canvas size based on first loaded image
+              canvas.width = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+            }
+            
+            setTimeout(() => {
+              try {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                frames.push({
+                  imageData: frameData,
+                  width: canvas.width,
+                  height: canvas.height,
+                  index: index
+                });
+                extractedFrames++;
+                updateExtractionProgress();
+              } catch (e) {
+                console.warn('Error capturing frame:', e);
+              }
+              
+              completedImages++;
+              if (completedImages >= frameCount) {
+                // Clean up
+                images.forEach(img => URL.revokeObjectURL(img.src));
+                // Sort frames by index to maintain order
+                frames.sort((a, b) => a.index - b.index);
+                setStatus('ok', `Extracted ${frames.length} frames, starting processing...`, 0.1);
+                resolve(frames);
+              }
+            }, index * frameDelay);
+          };
+          
+          img.onerror = function() {
+            URL.revokeObjectURL(img.src);
+            completedImages++;
+            if (completedImages >= frameCount) {
+              if (frames.length === 0) {
+                reject(new Error('Failed to extract any frames'));
+              } else {
+                frames.sort((a, b) => a.index - b.index);
+                setStatus('ok', `Extracted ${frames.length} frames, starting processing...`, 0.1);
+                resolve(frames);
+              }
+            }
+          };
+          
+          img.src = URL.createObjectURL(blob);
+        };
+        
+        // Create multiple images with staggered timing
+        for (let i = 0; i < frameCount; i++) {
+          const img = new Image();
+          images.push(img);
+          // Stagger the image creation to try to catch different frames
+          setTimeout(() => processImage(img, i), i * 50);
+        }
+        
+        // Fallback timeout - be more generous for large GIFs
+        const timeoutMs = Math.max(10000, frameCount * frameDelay + 5000);
+        setTimeout(() => {
+          if (frames.length === 0) {
+            reject(new Error('Timeout extracting GIF frames'));
+          } else {
+            frames.sort((a, b) => a.index - b.index);
+            setStatus('ok', `Extracted ${frames.length} frames (timeout), starting processing...`, 0.1);
+            resolve(frames);
+          }
+        }, timeoutMs);
+      });
+    }
+
+    // ——————— File handling ———————
+    async function loadFromBlob(blob) {
+      if (!blob) return;
+      // Revoke previous URL (if any)
+      if (state.url) { try { URL.revokeObjectURL(state.url); } catch(_){} }
+
+      // Store reference to original blob for GIF processing
+      state.sourceBlob = blob;
+
+      // Detect if this is an animated GIF
+      const gifInfo = await detectAnimatedGif(blob);
+      state.isAnimatedGif = gifInfo.isAnimated;
+      state.gifFrameRate = gifInfo.frameRate;
+      state.gifFrameCount = gifInfo.frameCount;
+
+      if (state.isAnimatedGif) {
+        setStatus('ok', `Animated GIF detected: ${state.gifFrameCount} frames at ${state.gifFrameRate} fps`);
+      }
+
+      const img = els.srcImg;
+      // Track this load to avoid race conditions if user selects multiple files quickly
+      state.loadId = (state.loadId || 0) + 1; const thisLoad = state.loadId;
+
+      function finalizeSuccess() {
+        if (thisLoad !== state.loadId) return; // stale
+        img.dataset.broken = '';
+        state.img = img;
+        if (state.isAnimatedGif) {
+          setStatus('ok', `Animated GIF loaded: ${state.gifFrameCount} frames at ${state.gifFrameRate} fps`);
+          // Update download button text for animated GIFs
+          if (els.download) {
+            els.download.textContent = 'Download Animated GIF';
+          }
+        } else {
+          setStatus('ok', 'Image loaded.');
+          // Reset download button text for static images
+          if (els.download) {
+            els.download.textContent = 'Download PNG';
+          }
+        }
+        scheduleRender();
+        maybeStartAnim();
+      }
+
+      function finalizeError(message) {
+        if (thisLoad !== state.loadId) return; // stale
+        img.dataset.broken = '1';
+        state.img = null;
+        setStatus('err', message || 'Failed to load the image. Try a different file.');
+        render();
+      }
+
+      function fallbackToDataURL(b) {
+        // Use FileReader as a robust fallback when object URLs misbehave or type is missing
+        try {
+          const fr = new FileReader();
+          fr.onerror = () => finalizeError('Could not read the file (FileReader error).');
+          fr.onload = () => {
+            if (thisLoad !== state.loadId) return; // stale
+            img.onload = finalizeSuccess;
+            img.onerror = () => finalizeError('Decoded data URL failed to load.');
+            img.src = typeof fr.result === 'string' ? fr.result : '';
+          };
+          fr.readAsDataURL(b);
+        } catch (e) {
+          finalizeError('Fallback read failed: ' + (e && e.message ? e.message : e));
+        }
+      }
+
+      // Prefer object URL first
+      const url = URL.createObjectURL(blob);
+      state.url = url;
+
+      // Prepare the <img> element
+      img.decoding = 'async';
+      img.dataset.broken = '';
+      img.onload = finalizeSuccess;
+      img.onerror = () => {
+        // If object URL load fails, attempt a FileReader dataURL fallback once
+        if (!img.dataset.fallbackUsed) {
+          img.dataset.fallbackUsed = '1';
+          setStatus('warn', 'Object URL failed; retrying with fallback…');
+          fallbackToDataURL(blob);
+        } else {
+          finalizeError('Failed to load the image. The file may be unsupported or corrupted.');
+        }
+      };
+
+      // Set src last (after handlers)
+      img.src = url;
+
+      // If decode() exists, try it—but rely on load/error as canonical
+      if (img.decode) {
+        img.decode().then(() => {
+          if (thisLoad !== state.loadId) return; // stale
+          if (isRenderable(img)) { scheduleRender(); maybeStartAnim(); }
+        }).catch(() => { /* onload/onerror will sort it out */ });
+      }
+
+      // Safety timer: if neither load nor error fires (rare), use fallback after 4s
+      setTimeout(() => {
+        if (thisLoad !== state.loadId) return; // stale
+        if (!isRenderable(img)) {
+          setStatus('warn', 'Taking longer than expected; trying a compatibility fallback…');
+          fallbackToDataURL(blob);
+        }
+      }, 4000);
+    }
+
+    async function handleFiles(files) {
+      if (!files || !files.length) return;
+      let f = files[0];
+      // Support HEIC/HEIF by converting to JPEG/PNG client-side if needed
+      const name = (f && f.name) ? f.name : '';
+      const ext = name.split('.').pop()?.toLowerCase() || '';
+      const looksHeic = ext === 'heic' || ext === 'heif' || /heic|heif/i.test(f.type || '');
+      try {
+        if (looksHeic && window.heic2any) {
+          setStatus('warn', 'Converting HEIC…');
+          const converted = await window.heic2any({ blob: f, toType: 'image/jpeg', quality: 0.92 });
+          // heic2any may return Blob or Array<Blob>
+          const outBlob = Array.isArray(converted) ? converted[0] : converted;
+          loadFromBlob(outBlob);
+          return;
+        }
+      } catch (e) {
+        setStatus('warn', 'HEIC conversion failed, attempting to load directly…');
+      }
+      // Previously we rejected non image/* types. Some OSes provide empty or wrong MIME; we now try anyway.
+      if (f && !/^image\//i.test(f.type || '')) {
+        setStatus('warn', 'File type is ' + (f.type || 'unknown') + '; attempting to load…');
+      }
+      loadFromBlob(f);
+    }
+
+    // ——————— Animation Export ———————
+    
+
+    // ——————— UI binding ———————
+    bindRange(els.pixel, els.numPixel, 'pixelSize', 1);
+    bindRange(els.gap, els.numGap, 'gap', 1);
+    bindRange(els.maxdim, els.numMax, 'maxDim', 64);
+    bindRange(document.getElementById('saturation'), document.getElementById('num-saturation'), 'saturation', 0);
+    bindRange(document.getElementById('contrast'), document.getElementById('num-contrast'), 'contrast', 0);
+    bindRange(document.getElementById('brightness'), document.getElementById('num-brightness'), 'brightness', 0);
+
+    // Initialize advanced color pickers with alpha support
+    function hexToRgba(hex){
+      const h = hex.replace('#','');
+      const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+      const a = h.length===8 ? parseInt(h.substring(6,8),16)/255 : 1;
+      return `rgba(${r},${g},${b},${a})`;
+    }
+    function rgbaToHexa(r,g,b,a){
+      const rh = r.toString(16).padStart(2,'0');
+      const gh = g.toString(16).padStart(2,'0');
+      const bh = b.toString(16).padStart(2,'0');
+      const ah = Math.round(a*255).toString(16).padStart(2,'0');
+      return `#${rh}${gh}${bh}${ah}`;
+    }
+
+    let bgPickr, strokePickr;
+    function updateColorButton(btn, hexa){ if (!btn) return; btn.style.background = hexToRgba(hexa); }
+    function initPickr(){
+      if (!window.Pickr) return false;
+      if (els.bgPickBtn && !bgPickr) {
+        bgPickr = Pickr.create({
+          el: els.bgPickBtn,
+          theme: 'nano',
+          default: hexToRgba(state.bg),
+          components: { preview: true, opacity: true, hue: true, interaction: { input: true, save: true } }
+        });
+        updateColorButton(els.bgPickBtn, state.bg);
+        bgPickr.on('save', (color) => {
+          if (!color) return; const rgba = color.toRGBA();
+          state.bg = rgbaToHexa(Math.round(rgba[0]),Math.round(rgba[1]),Math.round(rgba[2]),rgba[3]);
+          updateColorButton(els.bgPickBtn, state.bg);
+          render();
+        }).on('change', (color) => {
+          if (!color) return; const rgba = color.toRGBA();
+          state.bg = rgbaToHexa(Math.round(rgba[0]),Math.round(rgba[1]),Math.round(rgba[2]),rgba[3]);
+          updateColorButton(els.bgPickBtn, state.bg);
+          render();
+        });
+      }
+      if (els.strokePickBtn && !strokePickr) {
+        strokePickr = Pickr.create({
+          el: els.strokePickBtn,
+          theme: 'nano',
+          default: hexToRgba(state.strokeColor),
+          components: { preview: true, opacity: true, hue: true, interaction: { input: true, save: true } }
+        });
+        updateColorButton(els.strokePickBtn, state.strokeColor);
+        strokePickr.on('save', (color) => {
+          if (!color) return; const rgba = color.toRGBA();
+          state.strokeColor = rgbaToHexa(Math.round(rgba[0]),Math.round(rgba[1]),Math.round(rgba[2]),rgba[3]);
+          updateColorButton(els.strokePickBtn, state.strokeColor);
+          render();
+        }).on('change', (color) => {
+          if (!color) return; const rgba = color.toRGBA();
+          state.strokeColor = rgbaToHexa(Math.round(rgba[0]),Math.round(rgba[1]),Math.round(rgba[2]),rgba[3]);
+          updateColorButton(els.strokePickBtn, state.strokeColor);
+          render();
+        });
+      }
+      return !!(bgPickr || strokePickr);
+    }
+    function ensurePickers(){ if (initPickr()) { document.removeEventListener('DOMContentLoaded', ensurePickers); window.removeEventListener('load', ensurePickers); } }
+    // Try now and on load to ensure Pickr (deferred) has executed
+    ensurePickers();
+    document.addEventListener('DOMContentLoaded', ensurePickers);
+    window.addEventListener('load', ensurePickers);
+    setTimeout(ensurePickers, 50);
+    setTimeout(ensurePickers, 200);
+    
+    // Keep legacy listeners no-op since native inputs replaced by pickers
+    // els.bg.addEventListener('input', () => { state.bg = els.bg.value; render(); });
+    els.fit.addEventListener('change', () => { state.fit = els.fit.value; render(); });
+    els.shape.addEventListener('change', () => { state.shape = els.shape.value; render(); });
+    els.radius.addEventListener('input', () => { state.radius = +els.radius.value; render(); });
+    els.stroke.addEventListener('input', () => { state.stroke = +els.stroke.value; render(); });
+    // stroke color handled by advanced picker
+    
+
+    // ——————— Animated GIF Processing ———————
+    async function processAnimatedGif() {
+      if (!state.isAnimatedGif || !state.sourceBlob) {
+        throw new Error('No animated GIF loaded');
+      }
+
+      setStatus('ok', 'Extracting frames from animated GIF...', 0.05);
+
+      // Extract frames from the source GIF
+      let frames;
+      try {
+        frames = await extractGifFramesAdvanced(
+          state.sourceBlob, 
+          state.gifFrameCount, 
+          state.gifFrameRate
+        );
+      } catch (error) {
+        console.warn('Advanced frame extraction failed, trying simple method:', error);
+        setStatus('warn', 'Advanced extraction failed, trying simple method...', 0.07);
+        frames = await extractGifFramesSimple(state.sourceBlob);
+      }
+
+      if (!frames || frames.length === 0) {
+        throw new Error('Failed to extract frames from GIF');
+      }
+
+      setStatus('ok', `Processing ${frames.length} frames...`, 0.1);
+
+      // Set up output canvas dimensions based on mosaic settings
+      const firstFrame = frames[0];
+      const srcW = firstFrame.width;
+      const srcH = firstFrame.height;
+      
+      const fitNat = naturalFit(srcW, srcH, state.maxDim);
+      const drawW = Math.max(1, fitNat.w);
+      const drawH = Math.max(1, fitNat.h);
+
+      const p = Math.max(2, state.pixelSize|0);
+      const bx = Math.max(1, Math.floor(drawW / p));
+      const by = Math.max(1, Math.floor(drawH / p));
+
+      const g = Math.max(0, state.gap);
+      const cell = p + g;
+      const outW = Math.max(1, bx * cell - g);
+      const outH = Math.max(1, by * cell - g);
+
+      // Set up GIF encoder
+      const enc = new GIFEncoder(outW, outH);
+      enc.setRepeat(0); // Loop forever
+      // GIF delay is in centiseconds (1/100th of a second), not milliseconds
+      const delayCs = Math.max(1, Math.round(100 / state.gifFrameRate));
+      enc.setDelay(delayCs);
+      enc.setQuality(10); // Good quality
+      enc.start();
+
+      // Create processing canvas
+      const processCanvas = document.createElement('canvas');
+      processCanvas.width = drawW;
+      processCanvas.height = drawH;
+      const processCtx = processCanvas.getContext('2d');
+
+      // Create output canvas  
+      const outputCanvas = document.createElement('canvas');
+      outputCanvas.width = outW;
+      outputCanvas.height = outH;
+      const outputCtx = outputCanvas.getContext('2d');
+
+      // Process each frame
+      for (let i = 0; i < frames.length; i++) {
+        const frame = frames[i];
+        const progress = 0.1 + (i / frames.length) * 0.8;
+        setStatus('ok', `Processing frame ${i + 1}/${frames.length}...`, progress);
+
+        // Create temporary canvas with the frame
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = frame.width;
+        tempCanvas.height = frame.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.putImageData(frame.imageData, 0, 0);
+
+        // Scale frame to processing size
+        processCtx.clearRect(0, 0, drawW, drawH);
+        processCtx.imageSmoothingEnabled = true;
+        
+        const r = computeDrawRect(srcW, srcH, drawW, drawH, state.fit);
+        processCtx.drawImage(tempCanvas, r.sx, r.sy, r.sw, r.sh, r.dx, r.dy, r.dw, r.dh);
+
+        // Apply mosaic effect to this frame
+        const processedFrame = await applyMosaicToFrame(processCanvas, drawW, drawH, outW, outH);
+        
+        // Add frame to GIF encoder
+        outputCtx.clearRect(0, 0, outW, outH);
+        outputCtx.putImageData(processedFrame, 0, 0);
+        enc.addFrame(outputCtx);
+      }
+
+      setStatus('ok', 'Finalizing animated GIF...', 0.95);
+      enc.finish();
+
+      const blob = enc.stream().getBlob();
+      setStatus('ok', `Animated GIF complete! ${(blob.size/1024/1024).toFixed(1)} MB`, 1.0);
+      
+      return blob;
+    }
+
+    async function applyMosaicToFrame(sourceCanvas, sourceW, sourceH, outW, outH) {
+      const sourceCtx = sourceCanvas.getContext('2d');
+      const sourceData = sourceCtx.getImageData(0, 0, sourceW, sourceH);
+
+      // Create small sampling canvas
+      const p = Math.max(2, state.pixelSize|0);
+      const bx = Math.max(1, Math.floor(sourceW / p));
+      const by = Math.max(1, Math.floor(sourceH / p));
+      
+      const smallCanvas = document.createElement('canvas');
+      smallCanvas.width = bx;
+      smallCanvas.height = by;
+      const smallCtx = smallCanvas.getContext('2d', { willReadFrequently: true });
+      
+      // Fill with background color
+      try { 
+        smallCtx.clearRect(0, 0, bx, by); 
+        smallCtx.fillStyle = hexToRgba(state.bg); 
+      } catch(_) { 
+        smallCtx.fillStyle = 'rgba(0,0,0,0)'; 
+      }
+      smallCtx.fillRect(0, 0, bx, by);
+      smallCtx.imageSmoothingEnabled = true;
+
+      // Draw source to small canvas
+      smallCtx.drawImage(sourceCanvas, 0, 0, bx, by);
+      const smallData = smallCtx.getImageData(0, 0, bx, by).data;
+
+      // Create output canvas
+      const outputCanvas = document.createElement('canvas');
+      outputCanvas.width = outW;
+      outputCanvas.height = outH;
+      const outputCtx = outputCanvas.getContext('2d');
+
+      // Clear and fill with background
+      outputCtx.clearRect(0, 0, outW, outH);
+      const hex = state.bg.replace('#', '');
+      const hasA = hex.length === 8;
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      const a = hasA ? parseInt(hex.substring(6, 8), 16)/255 : 1;
+      outputCtx.fillStyle = `rgba(${r},${g},${b},${a})`;
+      outputCtx.fillRect(0, 0, outW, outH);
+
+      // Apply mosaic effect
+      const gap = Math.max(0, state.gap);
+      const cell = p + gap;
+      const sat = Math.max(0, state.saturation ?? 1);
+      const con = Math.max(0, state.contrast ?? 1);
+      const bri = Math.max(0, state.brightness ?? 1);
+      const drawShape = state.shape;
+      const radius = state.radius;
+      const strokeW = state.stroke;
+      const strokeColor = state.strokeColor;
+
+      // Configure stroke if needed
+      if (strokeW > 0) {
+        outputCtx.lineWidth = strokeW;
+        const strokeHex = (strokeColor || '#000000FF').replace('#', '');
+        const strokeHasA = strokeHex.length === 8;
+        const sr = parseInt(strokeHex.substring(0, 2), 16);
+        const sg = parseInt(strokeHex.substring(2, 4), 16);
+        const sb = parseInt(strokeHex.substring(4, 6), 16);
+        const sa = strokeHasA ? parseInt(strokeHex.substring(6, 8), 16)/255 : 1;
+        outputCtx.strokeStyle = `rgba(${sr},${sg},${sb},${sa})`;
+      }
+
+      // Draw mosaic tiles
+      for (let y = 0; y < by; y++) {
+        for (let x = 0; x < bx; x++) {
+          const i = (y * bx + x) * 4;
+          let cr = smallData[i], cg = smallData[i+1], cb = smallData[i+2];
+          const ca = smallData[i+3] / 255;
+
+          // Apply adjustments
+          cr = (cr - 128) * con + 128; 
+          cg = (cg - 128) * con + 128; 
+          cb = (cb - 128) * con + 128;
+          const gray = 0.299*cr + 0.587*cg + 0.114*cb;
+          cr = gray + (cr - gray) * sat; 
+          cg = gray + (cg - gray) * sat; 
+          cb = gray + (cb - gray) * sat;
+          cr = cr * bri; 
+          cg = cg * bri; 
+          cb = cb * bri;
+          cr = Math.max(0, Math.min(255, cr)); 
+          cg = Math.max(0, Math.min(255, cg)); 
+          cb = Math.max(0, Math.min(255, cb));
+
+          const ox = x * cell;
+          const oy = y * cell;
+          const w = p, h = p;
+
+          outputCtx.globalAlpha = ca;
+          outputCtx.fillStyle = `rgb(${cr},${cg},${cb})`;
+
+          if (drawShape === 'square') {
+            outputCtx.fillRect(ox, oy, w, h);
+            if (strokeW > 0) { 
+              outputCtx.strokeRect(ox + strokeW/2, oy + strokeW/2, w - strokeW, h - strokeW); 
+            }
+          } else if (drawShape === 'rounded') {
+            roundedRect(outputCtx, ox, oy, w, h, radius);
+            outputCtx.fill(); 
+            if (strokeW > 0) outputCtx.stroke();
+          } else { // circle
+            const cx = ox + w/2, cy = oy + h/2; 
+            const rad = Math.min(w,h)/2;
+            outputCtx.beginPath(); 
+            outputCtx.arc(cx, cy, rad, 0, Math.PI*2); 
+            outputCtx.closePath();
+            outputCtx.fill(); 
+            if (strokeW > 0) outputCtx.stroke();
+          }
+        }
+      }
+
+      outputCtx.globalAlpha = 1.0;
+      return outputCtx.getImageData(0, 0, outW, outH);
+    }
+
+    els.download.addEventListener('click', async () => {
+      if (state.isAnimatedGif) {
+        try {
+          setStatus('ok', 'Processing animated GIF...', 0);
+          const blob = await processAnimatedGif();
+          
+          const a = document.createElement('a');
+          a.download = 'mosaic-animation.gif';
+          a.href = URL.createObjectURL(blob);
+          a.click();
+          URL.revokeObjectURL(a.href);
+        } catch (error) {
+          console.error('Error processing animated GIF:', error);
+          setStatus('err', `Error: ${error.message}`);
+        }
+      } else {
+        const a = document.createElement('a');
+        a.download = 'big-pixel.png';
+        a.href = els.canvas.toDataURL('image/png');
+        a.click();
+      }
+    });
+
+    els.reset.addEventListener('click', () => {
+      els.pixel.value = 18; if (els.numPixel) els.numPixel.value = 18; state.pixelSize = 18;
+      els.gap.value = 1; if (els.numGap) els.numGap.value = 1; state.gap = 1;
+      els.maxdim.value = 1536; if (els.numMax) els.numMax.value = 1536; state.maxDim = 1536;
+      state.bg = '#101318FF'; if (typeof bgPickr !== 'undefined' && bgPickr) bgPickr.setColor(hexToRgba(state.bg));
+      els.fit.value = 'contain'; state.fit = 'contain';
+      els.shape.value = 'square'; state.shape = 'square';
+      els.radius.value = 6; state.radius = 6;
+      els.stroke.value = 0; state.stroke = 0;
+      state.strokeColor = '#000000FF'; if (typeof strokePickr !== 'undefined' && strokePickr) strokePickr.setColor(hexToRgba(state.strokeColor));
+      const satEl = document.getElementById('saturation'); const numSat = document.getElementById('num-saturation');
+      const conEl = document.getElementById('contrast'); const numCon = document.getElementById('num-contrast');
+      const briEl = document.getElementById('brightness'); const numBri = document.getElementById('num-brightness');
+      if (satEl) { satEl.value = '1'; if (numSat) numSat.value = '1'; state.saturation = 1; }
+      if (conEl) { conEl.value = '1'; if (numCon) numCon.value = '1'; state.contrast = 1; }
+      if (briEl) { briEl.value = '1'; if (numBri) numBri.value = '1'; state.brightness = 1; }
+      
+      state.animatePref = 'off';
+      state.cropRect = null; state.map = null; endCropSelection();
+      
+      // Reset animated GIF state
+      state.isAnimatedGif = false;
+      state.gifFrameRate = 10;
+      state.gifFrameCount = 1;
+      state.sourceBlob = null;
+      
+      // Reset download button text
+      if (els.download) {
+        els.download.textContent = 'Download PNG';
+      }
+      
+      setActivePreset(0);
+      setStatus('ok', ''); render(); maybeStartAnim();
+    });
+
+    // Drag & drop
+    ;['dragenter','dragover'].forEach(ev => {
+      els.drop.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); els.drop.classList.add('drag'); });
+    });
+    ;['dragleave','dragend','drop'].forEach(ev => {
+      els.drop.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); els.drop.classList.remove('drag'); });
+    });
+    els.drop.addEventListener('drop', e => { handleFiles(e.dataTransfer.files); });
+    els.drop.addEventListener('click', () => els.file.click());
+    els.file.addEventListener('change', () => handleFiles(els.file.files));
+
+    // Crop toggle and interactions
+    els.cropToggle = document.getElementById('cropToggle');
+    els.cropOverlay = document.getElementById('cropOverlay');
+    if (els.cropToggle) {
+      els.cropToggle.addEventListener('click', () => {
+        state.cropping = !state.cropping;
+        els.cropToggle.setAttribute('aria-pressed', state.cropping ? 'true' : 'false');
+        if (state.cropping) beginCropSelection(); else endCropSelection();
+      });
+    }
+    // Preset save/load (five slots)
+    function presetKey(n){ return `mosaic-tool-preset-${n}`; }
+    function attachPresetHandlers(n){
+      const saveBtn = els[`saveP${n}`]; const loadBtn = els[`loadP${n}`];
+      if (saveBtn) saveBtn.addEventListener('click', () => {
+        try { localStorage.setItem(presetKey(n), JSON.stringify(serializeSettings())); setStatus('ok', `Preset ${n} saved.`); }
+        catch { setStatus('err', `Could not save preset ${n}.`); }
+      });
+      if (loadBtn) loadBtn.addEventListener('click', () => {
+        try { const txt = localStorage.getItem(presetKey(n)); if (!txt) { setStatus('warn', `Preset ${n} empty.`); return; }
+          applySettings(JSON.parse(txt)); setActivePreset(n); setStatus('ok', `Preset ${n} loaded.`); }
+        catch { setStatus('err', `Could not load preset ${n}.`); }
+      });
+    }
+    [1,2,3,4,5].forEach(attachPresetHandlers);
+    const resetCropBtn = document.getElementById('resetCrop');
+    if (resetCropBtn) {
+      resetCropBtn.addEventListener('click', () => {
+        state.cropRect = null;
+        endCropSelection();
+        render();
+      });
+    }
+
+    let drag = null; // {x0,y0,x1,y1}
+    function toCanvasXY(ev) {
+      const rect = els.canvas.getBoundingClientRect();
+      const x = (ev.clientX - rect.left) * (els.canvas.width / rect.width);
+      const y = (ev.clientY - rect.top) * (els.canvas.height / rect.height);
+      return { x: Math.max(0, Math.min(els.canvas.width, x)), y: Math.max(0, Math.min(els.canvas.height, y)) };
+    }
+    els.canvas.addEventListener('pointerdown', (ev) => {
+      if (!state.cropping) return;
+      ev.preventDefault(); ev.stopPropagation();
+      els.canvas.setPointerCapture(ev.pointerId);
+      const { x, y } = toCanvasXY(ev);
+      drag = { x0: x, y0: y, x1: x, y1: y };
+      updateOverlayRect(drag.x0, drag.y0, drag.x1, drag.y1);
+    });
+    els.canvas.addEventListener('pointermove', (ev) => {
+      if (!state.cropping || !drag) return;
+      const { x, y } = toCanvasXY(ev);
+      drag.x1 = x; drag.y1 = y;
+      updateOverlayRect(drag.x0, drag.y0, drag.x1, drag.y1);
+    });
+    els.canvas.addEventListener('pointerup', (ev) => {
+      if (!state.cropping || !drag) return;
+      const { x, y } = toCanvasXY(ev);
+      drag.x1 = x; drag.y1 = y;
+      const x0 = Math.min(drag.x0, drag.x1), x1 = Math.max(drag.x0, drag.x1);
+      const y0 = Math.min(drag.y0, drag.y1), y1 = Math.max(drag.y0, drag.y1);
+      els.canvas.releasePointerCapture(ev.pointerId);
+      // Minimum size guard
+      if (Math.abs(x1 - x0) < 5 || Math.abs(y1 - y0) < 5) { drag = null; if (els.cropOverlay) els.cropOverlay.innerHTML = ''; return; }
+      const a = mapOutputToSource(x0, y0); const b = mapOutputToSource(x1, y1);
+      if (a && b) {
+        const sx0 = Math.max(0, Math.min(state.img.naturalWidth, Math.min(a.sx, b.sx)));
+        const sy0 = Math.max(0, Math.min(state.img.naturalHeight, Math.min(a.sy, b.sy)));
+        const sx1 = Math.max(0, Math.min(state.img.naturalWidth, Math.max(a.sx, b.sx)));
+        const sy1 = Math.max(0, Math.min(state.img.naturalHeight, Math.max(a.sy, b.sy)));
+        state.cropRect = { sx: Math.floor(sx0), sy: Math.floor(sy0), sw: Math.max(1, Math.floor(sx1 - sx0)), sh: Math.max(1, Math.floor(sy1 - sy0)) };
+        render();
+      }
+      drag = null;
+      if (els.cropOverlay) els.cropOverlay.innerHTML = '';
+    });
+
+    // Theme toggle setup
+    const themeBtn = document.getElementById('themeToggle');
+    if (themeBtn) {
+      const root = document.documentElement;
+      // Load persisted or prefers-color-scheme
+      const saved = localStorage.getItem('theme');
+      const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+      const initial = saved || (prefersLight ? 'light' : 'dark');
+      const themeDefaults = { dark: '#101318', light: '#eef2f7' };
+      if (initial === 'light') { root.setAttribute('data-theme','light'); themeBtn.textContent = 'Dark mode'; themeBtn.setAttribute('aria-pressed','true'); }
+      else { root.removeAttribute('data-theme'); themeBtn.textContent = 'Light mode'; themeBtn.setAttribute('aria-pressed','false'); }
+
+      function applyThemeDefaultBg(force=false) {
+        const isLight = root.getAttribute('data-theme') === 'light';
+        const def = (isLight ? themeDefaults.light : themeDefaults.dark).toUpperCase();
+        // If forcing or current equals the opposite default (meaning not customized), update
+        const opposite = (isLight ? themeDefaults.dark : themeDefaults.light).toUpperCase();
+        const current = (state.bg || '').slice(0,7).toUpperCase();
+        if (force || current === opposite) {
+          state.bg = def + 'FF';
+          if (typeof bgPickr !== 'undefined' && bgPickr) bgPickr.setColor(hexToRgba(state.bg));
+        }
+      }
+      // Ensure initial background matches theme before first render
+      applyThemeDefaultBg(true);
+
+      themeBtn.addEventListener('click', () => {
+        const isLight = root.getAttribute('data-theme') === 'light';
+        if (isLight) { root.removeAttribute('data-theme'); localStorage.setItem('theme','dark'); themeBtn.textContent = 'Light mode'; themeBtn.setAttribute('aria-pressed','false'); }
+        else { root.setAttribute('data-theme','light'); localStorage.setItem('theme','light'); themeBtn.textContent = 'Dark mode'; themeBtn.setAttribute('aria-pressed','true'); }
+        applyThemeDefaultBg(false);
+        render();
+      });
+    }
+
+    // Initial blank render
+    setStatus('ok', '');
+    sizePreviewPanel();
+    render();
+  })();
+  </script>
+</body>
+</html>

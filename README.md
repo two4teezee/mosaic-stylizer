@@ -1,2 +1,2 @@
 # mosaic-stylizer
-Vibe-coded image-to-mosaic web app
+Vibe-coded image-to-mosaic web app. Mostly self-contained.

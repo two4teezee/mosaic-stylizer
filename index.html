@@ -224,10 +224,19 @@
           </div>
         </div>
 
-        <div class="u-grid">
-          <button id="reset" class="btn-ghost">Reset</button>
-          <button id="download" class="btn-primary">Download PNG</button>
+        <div class="row">
+          <div class="control">
+            <label for="imgquality">Image Quality</label>
+            <input type="range" id="quality" min="0" max="100" value="80" />
           </div>
+          <div class="kv"><input id="num-quality" type="number" min="0" max="100" step="1" value="80" class="[&::-webkit-inner-spin-button]:appearance-none" /></div>
+        </div>
+
+        <div class="u-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+          <button id="reset" class="btn-ghost">Reset</button>
+          <button id="downloadWebp" class="btn-primary">Download webp</button>
+          <button id="download" class="btn-primary">Download PNG</button>
+        </div>
 
         <div class="presets-row">
           <label for="presets-row">Save Presets</label>
@@ -531,8 +540,11 @@
       bgPickBtn: document.getElementById('bgPick'), strokePickBtn: document.getElementById('strokePick'),
       maxdim: $('maxdim'),
       numPixel: $('num-pixel'), numGap: $('num-gap'), numMax: $('num-maxdim'),
+      // New quality controls
+      quality: document.getElementById('quality'),
+      numQuality: document.getElementById('num-quality'),
       res: $('res'), blocks: $('blocks'),
-      download: $('download'), reset: $('reset'), srcImg: $('srcImg'),
+      download: $('download'), downloadWebp: document.getElementById('downloadWebp'), reset: $('reset'), srcImg: $('srcImg'),
       status: $('status'), statusBadge: $('statusBadge'), statusText: $('statusText'),
       // Preset buttons
       saveP1: document.getElementById('saveP1'), loadP1: document.getElementById('loadP1'),
@@ -555,6 +567,8 @@
       saturation: +(document.getElementById('saturation')?.value || 1),
       contrast: +(document.getElementById('contrast')?.value || 1),
       brightness: +(document.getElementById('brightness')?.value || 1),
+      // Image export quality (0-100 slider, store as 0-1 in stateQuality)
+      stateQuality: +(document.getElementById('quality')?.value || 80) / 100,
       
       animatePref: 'off',
       maxDim: +els.maxdim.value,
@@ -689,6 +703,7 @@
         saturation: state.saturation ?? 1,
         contrast: state.contrast ?? 1,
         brightness: state.brightness ?? 1,
+        quality: state.stateQuality ?? 0.8,
       };
     }
 
@@ -706,6 +721,7 @@
       if (typeof s.saturation === 'number') { const el=document.getElementById('saturation'); const num=document.getElementById('num-saturation'); if(el){ el.value=String(s.saturation); } if(num){ num.value=String(s.saturation);} state.saturation=s.saturation; }
       if (typeof s.contrast === 'number') { const el=document.getElementById('contrast'); const num=document.getElementById('num-contrast'); if(el){ el.value=String(s.contrast); } if(num){ num.value=String(s.contrast);} state.contrast=s.contrast; }
       if (typeof s.brightness === 'number') { const el=document.getElementById('brightness'); const num=document.getElementById('num-brightness'); if(el){ el.value=String(s.brightness); } if(num){ num.value=String(s.brightness);} state.brightness=s.brightness; }
+      if (typeof s.quality === 'number') { const el=document.getElementById('quality'); const num=document.getElementById('num-quality'); const q = Math.max(0, Math.min(1, s.quality)); if(el){ el.value=String(Math.round(q*100)); } if(num){ num.value=String(Math.round(q*100)); } state.stateQuality=q; }
       render();
     }
 
@@ -1439,6 +1455,22 @@
 
     let bgPickr, strokePickr;
     function updateColorButton(btn, hexa){ if (!btn) return; btn.style.background = hexToRgba(hexa); }
+    // Bind quality (0-100 UI) → stateQuality (0-1)
+    (function bindQuality(){
+      const slider = els.quality; const num = els.numQuality;
+      if (!slider) return;
+      const apply = (v) => { const q = Math.max(0, Math.min(100, +v||0)); slider.value = String(q); if (num) num.value = String(q); state.stateQuality = q/100; };
+      slider.addEventListener('input', () => apply(slider.value));
+      slider.addEventListener('change', () => apply(slider.value));
+      if (num) {
+        num.addEventListener('input', () => apply(num.value));
+        num.addEventListener('change', () => apply(num.value));
+        num.value = String(slider.value);
+      }
+      // initialize
+      apply(slider.value);
+    })();
+
     function initPickr(){
       if (!window.Pickr) return false;
       if (els.bgPickBtn && !bgPickr) {
@@ -1745,10 +1777,77 @@
       } else {
         const a = document.createElement('a');
         a.download = 'big-pixel.png';
-        a.href = els.canvas.toDataURL('image/png');
-        a.click();
+        // Prefer toBlob for memory; use quality if browser supports it for PNG (many ignore it)
+        const canvas = els.canvas;
+        if (canvas.toBlob) {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              a.href = URL.createObjectURL(blob);
+              a.click();
+              URL.revokeObjectURL(a.href);
+            } else {
+              a.href = canvas.toDataURL('image/png');
+              a.click();
+            }
+          }, 'image/png', state.stateQuality);
+        } else {
+          a.href = canvas.toDataURL('image/png');
+          a.click();
+        }
       }
     });
+
+    // WebP export handler
+    if (els.downloadWebp) {
+      els.downloadWebp.addEventListener('click', async () => {
+        try {
+          if (state.isAnimatedGif) {
+            // For animated GIF sources, export the processed animation as GIF (WebP animation not implemented)
+            setStatus('ok', 'Processing animated GIF...', 0);
+            const blob = await processAnimatedGif();
+            const a = document.createElement('a');
+            a.download = 'mosaic-animation.gif';
+            a.href = URL.createObjectURL(blob);
+            a.click();
+            URL.revokeObjectURL(a.href);
+            return;
+          }
+
+          const canvas = els.canvas;
+          if (!canvas) return;
+
+          // Prefer toBlob when available for better memory usage
+          if (canvas.toBlob) {
+            canvas.toBlob((blob) => {
+              if (!blob) {
+                // Fallback to dataURL if blob is null
+                const dataUrl = canvas.toDataURL('image/webp', state.stateQuality || 0.95);
+                const a = document.createElement('a');
+                a.download = 'big-pixel.webp';
+                a.href = dataUrl;
+                a.click();
+                return;
+              }
+              const a = document.createElement('a');
+              a.download = 'big-pixel.webp';
+              a.href = URL.createObjectURL(blob);
+              a.click();
+              URL.revokeObjectURL(a.href);
+            }, 'image/webp', state.stateQuality || 0.95);
+          } else {
+            // Older browsers: fallback to dataURL
+            const dataUrl = canvas.toDataURL('image/webp', state.stateQuality || 0.95);
+            const a = document.createElement('a');
+            a.download = 'big-pixel.webp';
+            a.href = dataUrl;
+            a.click();
+          }
+        } catch (error) {
+          console.error('Error exporting WebP:', error);
+          setStatus('err', `Error exporting WebP: ${error.message}`);
+        }
+      });
+    }
 
     els.reset.addEventListener('click', () => {
       els.pixel.value = 18; if (els.numPixel) els.numPixel.value = 18; state.pixelSize = 18;
